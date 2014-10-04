@@ -1886,6 +1886,73 @@ class remotecontrol_handle
             return array('status' => 'Invalid session key');
     }
 
+        /**
+     * RPC Routine to return subquestions of array-type questions.
+     * Returns array of ids and info sorted by question_order.
+     *
+     * @access public
+     * @param string $sSessionKey Auth credentials
+     * @param int $iSurveyID The id of the survey that the question will belong
+     * @param int $iGroupID The id of the group that the question will belong
+     * @param int $iQuestionID The id of the parent question to the subquestions
+     * @param string $sLanguage Optional parameter language for multilingual questions
+     * @return array The requested values
+     *
+     */
+    public function list_subquestions($sSessionKey,$iSurveyID,$iGroupID,$iQuestionID,$sLanguage=null)
+    {
+        if($this->_checkSessionKey($sSessionKey))
+        {
+            Yii::app()->loadHelper("surveytranslator");
+            $oSurvey = Survey::model()->findByPk($iSurveyID);
+            if(!isset($oSurvey))
+                return array('status' => 'Error: Invalid survey ID');
+            
+            if(Permission::model()->hasSurveyPermission($iSurveyID, 'survey','read'))
+            {
+                if(is_null($sLanguage))
+                    $sLanguage=$oSurvey->language;
+                
+                if(!array_key_exists($sLanguage,getLanguageDataRestricted()))
+                    return array('status' => 'Error: Invalid language');
+
+                $oGroup = QuestionGroup::model()->findByAttributes(array('gid' => $iGroupID));
+                if (!isset($oGroup))
+                    return array('status' => 'Error: Invalid group ID');
+                $sGroupSurveyID = $oGroup['sid'];
+
+                if($sGroupSurveyID != $iSurveyID)
+                    return array('status' => 'Error: Missmatch in surveyid and groupid');
+                
+                $oQuestion = Question::model()->findByAttributes(array('qid'=>$iQuestionID));
+                if (!isset($oQuestion))
+                    return array('status' => 'Error: Invalid question ID');
+                
+                # get subquestions of qid (i.e. all questions who have qid as parent_id within this survey)
+                $aSubQuestionList = Question::model()->findAllByAttributes(array("sid"=>$iSurveyID,"parent_qid"=>$iQuestionID,"language"=>$sLanguage),array('order' => "question_order"));
+                
+                if(!$aSubQuestionList)
+                    return array('status' => 'No subquestions found');
+                
+                $aData = array();
+                foreach($aSubQuestionList as $oSubQuestion)
+                {
+                    $aData[] = array(
+                        'id' => $oSubQuestion->primaryKey, 
+                        'title'=>$oSubQuestion->attributes['title'],
+                        'type'=>$oSubQuestion->attributes['type'],
+                        'question'=>$oSubQuestion->attributes['question'],
+                        'question_order'=>$oSubQuestion->attributes['question_order'],
+                    );
+                }
+                return $aData;
+            } else
+                return array('status' => 'No permission');
+        } else
+            return array('status' => 'Invalid session key');
+    }
+
+    
     /**
      * RPC Routine to list the ids and info of surveys belonging to a user.
      * Returns array of ids and info.
